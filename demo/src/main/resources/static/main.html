@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Main</title>
+    <style>
+        body {
+            display: none; /* <-- IMPORTANT: hide all content until authorized */
+            font-family: Arial, sans-serif;
+        }
+        #balanceForm, #favoriteForm {
+            margin-bottom: 1em;
+        }
+        table {
+            width: 100%;
+            margin-top: 20px;
+            border-collapse: collapse;
+        }
+        table, th, td {
+            border: 1px solid black;
+        }
+        th, td {
+            padding: 8px;
+            text-align: left;
+        }
+        button {
+            padding: 5px 10px;
+            cursor: pointer;
+        }
+    </style>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', () => {
+            init();
+        });
+
+        async function init() {
+            const token = localStorage.getItem('authToken');
+            if (!token) return redirectToLogin();
+
+            const isValid = await validateToken(token);
+            if (!isValid) return show403();
+
+            // Authorized: show interface
+            document.body.style.display = 'block';
+            setupEventListeners(token);
+            fetchFavorites(token); // initial load
+        }
+
+        function redirectToLogin() {
+            alert('You are not authorized');
+            window.location.href = '/login.html';
+        }
+
+        function show403() {
+            document.body.innerHTML = '<h2 style="color:red;text-align:center;margin-top:50px;">403: Access Denied</h2>';
+        }
+
+        async function validateToken(token) {
+            try {
+                const res = await fetch('/eth/favorites', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                return res.ok;
+            } catch (e) {
+                return false;
+            }
+        }
+
+        function setupEventListeners(token) {
+            const balanceForm = document.getElementById('balanceForm');
+            balanceForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const address = document.getElementById('ethAddress').value;
+                try {
+                    const response = await fetch(`/eth/balance/${address}`, {
+                        method: 'GET',
+                        headers: {
+                            'Authorization': 'Bearer ' + token
+                        }
+                    });
+                    const data = await response.text();
+                    document.getElementById('data').innerText = response.ok ? `Balance: ${data}` : `Error: ${data}`;
+                } catch (err) {
+                    document.getElementById('data').innerText = 'Error: ' + err.message;
+                }
+            });
+
+            const favoriteForm = document.getElementById('favoriteForm');
+            favoriteForm.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                const ethAddress = document.getElementById('favoriteAddress').value;
+                try {
+                    const response = await fetch(`/eth/favorites/add?ethAddress=${ethAddress}`, {
+                        method: 'POST',
+                        headers: {
+                            'Authorization': 'Bearer ' + token
+                        }
+                    });
+                    if (!response.ok) throw new Error(await response.text());
+                    alert('Added to favorites!');
+                    fetchBalanceAndUpdateTable(ethAddress, token);
+                } catch (err) {
+                    alert('Error: ' + err.message);
+                }
+            });
+        }
+
+        async function fetchFavorites(token) {
+            try {
+                const res = await fetch('/eth/favorites', {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                if (!res.ok) throw new Error('Failed to load favorites');
+
+                const favorites = await res.json();
+                const tableBody = document.getElementById('favoritesTableBody');
+                tableBody.innerHTML = '';
+
+                for (const address of favorites) {
+                    await fetchBalanceAndUpdateTable(address, token);
+                }
+            } catch (err) {
+                alert('Error loading favorites: ' + err.message);
+            }
+        }
+
+        async function fetchBalanceAndUpdateTable(address, token) {
+            try {
+                const res = await fetch(`/eth/balance/${address}`, {
+                    method: 'GET',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+                const balance = await res.text();
+                const row = document.createElement('tr');
+                row.innerHTML = `
+                    <td>${address}</td>
+                    <td>${balance}</td>
+                    <td><button onclick="removeFavorite('${address}')">Remove</button></td>
+                `;
+                document.getElementById('favoritesTableBody').appendChild(row);
+            } catch (err) {
+                console.error('Balance error: ' + err.message);
+            }
+        }
+
+        async function removeFavorite(address) {
+            const token = localStorage.getItem('authToken');
+            try {
+                const res = await fetch(`/eth/favorites/remove?ethAddress=${address}`, {
+                    method: 'DELETE',
+                    headers: {
+                        'Authorization': 'Bearer ' + token
+                    }
+                });
+
+                if (!res.ok) throw new Error('Failed to remove');
+                alert('Removed from favorites');
+                location.reload();
+            } catch (err) {
+                alert('Error: ' + err.message);
+            }
+        }
+    </script>
+
+</head>
+<body>
+<h2>Main Page</h2>
+
+<!-- Form to check balance -->
+<form id="balanceForm">
+    <label for="ethAddress">Ethereum address:</label>
+    <input type="text" id="ethAddress" placeholder="0x..." required>
+    <button type="submit">Show balance</button>
+</form>
+
+<p id="data">Enter an address to see the balance</p>
+
+<hr>
+
+<!-- Form to add address to favorites -->
+<form id="favoriteForm">
+    <label for="favoriteAddress">Add to Favorites:</label>
+    <input type="text" id="favoriteAddress" placeholder="0x..." required>
+    <button type="submit">Add to favorites</button>
+</form>
+
+<!-- Table for displaying favorite addresses and balances -->
+<h3>Your Favorite Addresses</h3>
+<table>
+    <thead>
+    <tr>
+        <th>Ethereum Address</th>
+        <th>Balance</th>
+        <th>Action</th>
+    </tr>
+    </thead>
+    <tbody id="favoritesTableBody">
+    <!-- Rows will be inserted here dynamically -->
+    </tbody>
+</table>
+
+</body>
+</html>

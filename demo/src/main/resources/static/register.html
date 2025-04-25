@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Register</title>
+</head>
+<body>
+<h2>Register</h2>
+<form id="registerForm">
+    <label>Username: <input type="text" name="username" required/></label><br>
+    <label>Password: <input type="password" name="password" required></label><br>
+    <button type="submit">Register</button>
+</form>
+
+<button onclick="goToLogin()">Login</button>
+
+<p id="response" style="color: red;"></p>
+
+<script>
+    const form = document.getElementById("registerForm");
+
+    form.addEventListener("submit", async function(event) {
+        event.preventDefault();
+
+        const formData = new FormData(form);
+        const jsonData = {};
+        formData.forEach((value, key) => jsonData[key] = value);
+
+        try {
+            const response = await fetch("/eth/auth/register", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json"
+                },
+                body: JSON.stringify(jsonData)
+            });
+
+            if (response.ok) {
+                window.location.href = "login.html";
+            } else {
+                const result = await response.json();
+                document.getElementById("response").innerText = result.message || "Registration failed";
+            }
+        } catch (err) {
+            document.getElementById("response").innerText = "Network error. Try again.";
+        }
+    });
+
+    function goToLogin() {
+        window.location.href = "login.html";
+    }
+</script>
+</body>
+</html>
